@@ -76,12 +76,40 @@ export function useLiveKit() {
     setRemoteScreenShare(null);
   }, []);
 
+  const resetState = useCallback(() => {
+    roomRef.current = null;
+    setConnectedChannelId(null);
+    setParticipants([]);
+    setIsMuted(false);
+    setIsDeafened(false);
+    setIsScreenSharing(false);
+    setScreenShareTrack(null);
+    setRemoteScreenShare(null);
+  }, []);
+
   const setupRoomListeners = useCallback(
     (room: Room) => {
+      room.on(RoomEvent.Disconnected, () => {
+        // Only reset if this room is still the active one — avoids clobbering
+        // state when disconnecting an old room while switching channels.
+        if (roomRef.current === room) {
+          resetState();
+        }
+      });
       room.on(RoomEvent.ParticipantConnected, updateParticipants);
       room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
-      room.on(RoomEvent.TrackMuted, updateParticipants);
-      room.on(RoomEvent.TrackUnmuted, updateParticipants);
+      room.on(RoomEvent.TrackMuted, (publication, participant) => {
+        updateParticipants();
+        if (participant.isLocal && publication.kind === Track.Kind.Audio) {
+          setIsMuted(true);
+        }
+      });
+      room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
+        updateParticipants();
+        if (participant.isLocal && publication.kind === Track.Kind.Audio) {
+          setIsMuted(false);
+        }
+      });
       room.on(RoomEvent.ActiveSpeakersChanged, updateParticipants);
       room.on(RoomEvent.LocalTrackPublished, () => {
         updateParticipants();
@@ -112,7 +140,7 @@ export function useLiveKit() {
         }
       });
     },
-    [updateParticipants, updateScreenShare]
+    [updateParticipants, updateScreenShare, resetState]
   );
 
   const join = useCallback(
@@ -141,16 +169,9 @@ export function useLiveKit() {
   const leave = useCallback(async () => {
     if (roomRef.current) {
       await roomRef.current.disconnect();
-      roomRef.current = null;
     }
-    setConnectedChannelId(null);
-    setParticipants([]);
-    setIsMuted(false);
-    setIsDeafened(false);
-    setIsScreenSharing(false);
-    setScreenShareTrack(null);
-    setRemoteScreenShare(null);
-  }, []);
+    resetState();
+  }, [resetState]);
 
   const toggleMute = useCallback(async () => {
     const room = roomRef.current;

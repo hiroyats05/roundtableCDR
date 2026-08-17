@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import argon2 from "argon2";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { db } from "../../database/index.js";
 import { users } from "../../database/schema.js";
 import { config } from "../../config/index.js";
 import {
   createSession,
   deleteSession,
+  resolveRole,
   SESSION_COOKIE,
   SESSION_DURATION_MS,
 } from "./session.js";
@@ -47,11 +48,14 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: "Username already taken" });
     }
 
+    const [{ value: userCount }] = await db.select({ value: count() }).from(users);
+    const role = userCount === 0 ? "ADMIN" : "MEMBER";
+
     const passwordHash = await argon2.hash(password);
     const [user] = await db
       .insert(users)
-      .values({ username, passwordHash })
-      .returning({ id: users.id, username: users.username });
+      .values({ username, passwordHash, role })
+      .returning({ id: users.id, username: users.username, role: users.role });
 
     const sessionId = await createSession(user.id);
 
@@ -63,7 +67,7 @@ export async function authRoutes(app: FastifyInstance) {
       maxAge: SESSION_DURATION_MS / 1000,
     });
 
-    return { user: { id: user.id, username: user.username } };
+    return { user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) } };
   });
 
   app.post<{ Body: LoginBody }>("/auth/login", async (request, reply) => {
@@ -93,7 +97,7 @@ export async function authRoutes(app: FastifyInstance) {
       maxAge: SESSION_DURATION_MS / 1000,
     });
 
-    return { user: { id: user.id, username: user.username } };
+    return { user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) } };
   });
 
   app.post("/auth/logout", async (request, reply) => {

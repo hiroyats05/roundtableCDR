@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { MicTestModal } from "./MicTestModal";
+
 interface VoiceControlsProps {
   username: string;
   isConnected: boolean;
@@ -23,9 +26,15 @@ export function VoiceControls({
   onDisconnect,
   onLogout,
 }: VoiceControlsProps) {
+  const [micTestOpen, setMicTestOpen] = useState(false);
+
   return (
     <footer className="voice-controls">
       <span className="voice-user">{username}</span>
+
+      <button onClick={() => setMicTestOpen(true)}>🎙 Testar microfone</button>
+
+      {micTestOpen && <MicTestModal onClose={() => setMicTestOpen(false)} />}
 
       {isConnected && (
         <>

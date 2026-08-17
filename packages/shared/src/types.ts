@@ -1,8 +1,10 @@
 export type ChannelType = "TEXT" | "VOICE";
+export type UserRole = "ADMIN" | "MEMBER";
 
 export interface User {
   id: string;
   username: string;
+  role: UserRole;
 }
 
 export interface Channel {

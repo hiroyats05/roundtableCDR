@@ -8,6 +8,7 @@ import { authRoutes } from "./modules/auth/routes.js";
 import { channelRoutes } from "./modules/channels/routes.js";
 import { messageRoutes } from "./modules/messages/routes.js";
 import { voiceRoutes } from "./modules/voice/routes.js";
+import { usersRoutes } from "./modules/users/routes.js";
 import { websocketPlugin } from "./websocket/index.js";
 import { SESSION_COOKIE } from "./modules/auth/session.js";
 
@@ -36,6 +37,7 @@ await app.register(authRoutes);
 await app.register(channelRoutes);
 await app.register(messageRoutes);
 await app.register(voiceRoutes);
+await app.register(usersRoutes);
 await app.register(websocketPlugin);
 
 try {

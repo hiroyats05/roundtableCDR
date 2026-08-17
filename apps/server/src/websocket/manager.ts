@@ -134,7 +134,7 @@ export class WebSocketManager {
     this.broadcastToChannel(channelId, { type: "message:created", message });
   }
 
-  private broadcastToChannel(channelId: string, event: ServerEvent) {
+  broadcastToChannel(channelId: string, event: ServerEvent) {
     const subscribers = this.channelSubscribers.get(channelId);
     if (!subscribers) return;
 
@@ -165,7 +165,7 @@ export class WebSocketManager {
     }
   }
 
-  private broadcast(event: ServerEvent) {
+  broadcast(event: ServerEvent) {
     const payload = JSON.stringify(event);
     for (const { socket } of this.connections.values()) {
       if (socket.readyState === 1) {

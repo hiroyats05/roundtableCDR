@@ -1,8 +1,9 @@
 import { useState } from "react";
+import type { User } from "@saladereunioes/shared";
 import { api } from "../services/api";
 
 interface AuthFormProps {
-  onAuth: (user: { id: string; username: string }) => void;
+  onAuth: (user: User) => void;
 }
 
 export function AuthForm({ onAuth }: AuthFormProps) {

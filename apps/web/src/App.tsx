@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Channel, Message, ServerEvent } from "@saladereunioes/shared";
+import type { Channel, ChannelType, Message, ServerEvent, User, UserRole } from "@saladereunioes/shared";
 import { api } from "./services/api";
 import { useWebSocket } from "./websocket/useWebSocket";
 import { useLiveKit } from "./livekit/useLiveKit";
@@ -10,13 +10,14 @@ import { ScreenShareView } from "./components/ScreenShareView";
 import { VoiceControls } from "./components/VoiceControls";
 
 export function App() {
-  const [user, setUser] = useState<{ id: string; username: string } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
-  const [knownUsers, setKnownUsers] = useState<Map<string, string>>(new Map());
+  const [users, setUsers] = useState<Map<string, User>>(new Map());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const joinedChannelRef = useRef<string | null>(null);
 
@@ -28,6 +29,21 @@ export function App() {
         if (event.message.channelId === selectedChannelId) {
           setMessages((prev) => [...prev, event.message]);
         }
+      } else if (event.type === "message:deleted") {
+        if (event.channelId === selectedChannelId) {
+          setMessages((prev) => prev.filter((m) => m.id !== event.messageId));
+        }
+      } else if (event.type === "channel:created") {
+        setChannels((prev) => (prev.some((c) => c.id === event.channel.id) ? prev : [...prev, event.channel]));
+      } else if (event.type === "channel:deleted") {
+        setChannels((prev) => prev.filter((c) => c.id !== event.channelId));
+        setSelectedChannelId((prev) => (prev === event.channelId ? null : prev));
+        if (livekit.connectedChannelId === event.channelId) {
+          void livekit.leave();
+        }
+      } else if (event.type === "user:updated") {
+        setUsers((prev) => new Map(prev).set(event.user.id, event.user));
+        setUser((prev) => (prev && prev.id === event.user.id ? event.user : prev));
       } else if (event.type === "presence:online") {
         setOnlineUsers((prev) => new Set(prev).add(event.userId));
       } else if (event.type === "presence:offline") {
@@ -38,7 +54,7 @@ export function App() {
         });
       }
     },
-    [selectedChannelId]
+    [selectedChannelId, livekit]
   );
 
   const { send: wsSend } = useWebSocket(handleWsEvent, !!user);
@@ -48,7 +64,6 @@ export function App() {
       .me()
       .then(({ user: u }) => {
         setUser(u);
-        setKnownUsers(new Map([[u.id, u.username]]));
         setOnlineUsers(new Set([u.id]));
       })
       .catch(() => {})
@@ -59,12 +74,15 @@ export function App() {
     if (!user) return;
 
     api.getChannels().then((data) => {
-      const typed = data as Channel[];
-      setChannels(typed);
-      const firstText = typed.find((c) => c.type === "TEXT");
+      setChannels(data);
+      const firstText = data.find((c) => c.type === "TEXT");
       if (firstText) {
         setSelectedChannelId(firstText.id);
       }
+    });
+
+    api.getUsers().then((data) => {
+      setUsers(new Map(data.map((u) => [u.id, u])));
     });
   }, [user]);
 
@@ -82,15 +100,17 @@ export function App() {
   }, [selectedChannelId, wsSend]);
 
   const userMap = useMemo(() => {
-    const map = new Map(knownUsers);
-    if (user) map.set(user.id, user.username);
+    const map = new Map<string, string>();
+    for (const u of users.values()) {
+      map.set(u.id, u.username);
+    }
     for (const msg of messages) {
       if (!map.has(msg.authorId)) {
         map.set(msg.authorId, msg.authorId.slice(0, 8));
       }
     }
     return map;
-  }, [knownUsers, user, messages]);
+  }, [users, messages]);
 
   const voiceParticipantsMap = useMemo(() => {
     const map = new Map<string, typeof livekit.participants>();
@@ -101,10 +121,10 @@ export function App() {
   }, [livekit.connectedChannelId, livekit.participants]);
 
   const selectedChannel = channels.find((c) => c.id === selectedChannelId);
+  const isAdmin = user?.role === "ADMIN";
 
-  const handleAuth = (u: { id: string; username: string }) => {
+  const handleAuth = (u: User) => {
     setUser(u);
-    setKnownUsers(new Map([[u.id, u.username]]));
     setOnlineUsers(new Set([u.id]));
   };
 
@@ -115,6 +135,7 @@ export function App() {
     setChannels([]);
     setSelectedChannelId(null);
     setMessages([]);
+    setUsers(new Map());
   };
 
   const handleJoinVoice = async (channelId: string) => {
@@ -128,6 +149,35 @@ export function App() {
     } else {
       void livekit.startScreenShare();
     }
+  };
+
+  const handleSelectTextChannel = (channelId: string) => {
+    setSelectedChannelId(channelId);
+    setSidebarOpen(false);
+  };
+
+  const handleCreateChannel = async (name: string, type: ChannelType) => {
+    await api.createChannel(name, type);
+  };
+
+  const handleDeleteChannel = async (channelId: string) => {
+    await api.deleteChannel(channelId);
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    await api.deleteMessage(messageId);
+  };
+
+  const handleKickParticipant = async (channelId: string, userId: string) => {
+    await api.kickParticipant(channelId, userId);
+  };
+
+  const handleMuteParticipant = async (channelId: string, userId: string) => {
+    await api.muteParticipant(channelId, userId);
+  };
+
+  const handleUpdateUserRole = async (userId: string, role: UserRole) => {
+    await api.updateUserRole(userId, role);
   };
 
   if (loading) {
@@ -150,13 +200,32 @@ export function App() {
         connectedVoiceChannelId={livekit.connectedChannelId}
         voiceParticipants={voiceParticipantsMap}
         onlineUsers={onlineUsers}
-        userMap={userMap}
+        users={users}
         currentUserId={user.id}
-        onSelectTextChannel={setSelectedChannelId}
+        isAdmin={isAdmin}
+        isOpen={sidebarOpen}
+        onSelectTextChannel={handleSelectTextChannel}
         onJoinVoiceChannel={handleJoinVoice}
+        onClose={() => setSidebarOpen(false)}
+        onCreateChannel={handleCreateChannel}
+        onDeleteChannel={handleDeleteChannel}
+        onKickParticipant={handleKickParticipant}
+        onMuteParticipant={handleMuteParticipant}
+        onUpdateUserRole={handleUpdateUserRole}
       />
 
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+
       <main className="main-content">
+        <div className="mobile-topbar">
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen((v) => !v)} aria-label="Abrir canais">
+            ☰
+          </button>
+          <span className="mobile-topbar-title">
+            {selectedChannel ? `# ${selectedChannel.name}` : "Sala de Reuniões"}
+          </span>
+        </div>
+
         {showScreenShare ? (
           <ScreenShareView
             participantName={showScreenShare.participantName}
@@ -168,11 +237,13 @@ export function App() {
             messages={messages}
             userMap={userMap}
             currentUserId={user.id}
+            isAdmin={isAdmin}
             onSend={(content) => {
               if (selectedChannelId) {
                 wsSend({ type: "message:send", channelId: selectedChannelId, content });
               }
             }}
+            onDeleteMessage={handleDeleteMessage}
           />
         ) : (
           <div className="empty-state">Selecione um canal</div>

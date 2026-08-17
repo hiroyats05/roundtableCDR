@@ -6,7 +6,9 @@ interface ChatPanelProps {
   messages: Message[];
   userMap: Map<string, string>;
   currentUserId: string;
+  isAdmin: boolean;
   onSend: (content: string) => void;
+  onDeleteMessage: (messageId: string) => void;
 }
 
 export function ChatPanel({
@@ -14,7 +16,9 @@ export function ChatPanel({
   messages,
   userMap,
   currentUserId,
+  isAdmin,
   onSend,
+  onDeleteMessage,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -46,10 +50,25 @@ export function ChatPanel({
             minute: "2-digit",
           });
 
+          const canDelete = isOwn || isAdmin;
+
           return (
             <div key={msg.id} className={`message ${isOwn ? "own" : ""}`}>
               <span className="message-author">{author}</span>
               <span className="message-time">{time}</span>
+              {canDelete && (
+                <button
+                  className="message-delete-button"
+                  onClick={() => {
+                    if (window.confirm("Apagar esta mensagem?")) {
+                      onDeleteMessage(msg.id);
+                    }
+                  }}
+                  aria-label="Apagar mensagem"
+                >
+                  🗑
+                </button>
+              )}
               <p className="message-content">{msg.content}</p>
             </div>
           );

@@ -1,4 +1,4 @@
-import type { Message } from "./types.js";
+import type { Channel, Message, User } from "./types.js";
 
 export type ClientEvent =
   | {
@@ -27,4 +27,21 @@ export type ServerEvent =
   | {
       type: "presence:offline";
       userId: string;
+    }
+  | {
+      type: "message:deleted";
+      channelId: string;
+      messageId: string;
+    }
+  | {
+      type: "channel:created";
+      channel: Channel;
+    }
+  | {
+      type: "channel:deleted";
+      channelId: string;
+    }
+  | {
+      type: "user:updated";
+      user: User;
     };
