@@ -1,0 +1,16 @@
+[package]
+name = "saladereunioes"
+version = "0.0.1"
+description = "Sala de Reuniões desktop"
+edition = "2021"
+
+[lib]
+name = "saladereunioes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"

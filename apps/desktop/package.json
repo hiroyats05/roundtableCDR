@@ -1,0 +1,13 @@
+{
+  "name": "@saladereunioes/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

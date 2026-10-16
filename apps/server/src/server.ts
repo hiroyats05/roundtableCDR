@@ -15,7 +15,7 @@ import { SESSION_COOKIE } from "./modules/auth/session.js";
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
-  origin: config.frontendUrl,
+  origin: [config.frontendUrl, ...config.extraCorsOrigins],
   credentials: true,
 });
 

@@ -54,8 +54,18 @@ export async function getUserFromSession(sessionId: string | undefined) {
   return result[0] ?? null;
 }
 
+// Desktop clients (Tauri) can't rely on cross-site cookies, so they send the
+// session id as a Bearer token instead. Browsers keep using the httpOnly cookie.
+export function getSessionIdFromRequest(request: FastifyRequest): string | undefined {
+  const header = request.headers.authorization;
+  if (header?.startsWith("Bearer ")) {
+    return header.slice("Bearer ".length).trim() || undefined;
+  }
+  return request.cookies[SESSION_COOKIE];
+}
+
 export async function authenticateRequest(request: FastifyRequest) {
-  const sessionId = request.cookies[SESSION_COOKIE];
+  const sessionId = getSessionIdFromRequest(request);
   const user = await getUserFromSession(sessionId);
   if (user) {
     request.user = { id: user.id, username: user.username, role: resolveRole(user.username, user.role) };

@@ -80,7 +80,7 @@ export function MicTestModal({ onClose }: MicTestModalProps) {
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: "audio/webm" });
+      const blob = new Blob(chunks, { type: recorder.mimeType });
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;

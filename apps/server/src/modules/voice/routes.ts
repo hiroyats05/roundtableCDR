@@ -16,6 +16,34 @@ const roomService = new RoomServiceClient(
 );
 
 export async function voiceRoutes(app: FastifyInstance) {
+  // Audio transmission test: a private room per user where the client publishes
+  // its mic with one identity and listens back with another, so it hears exactly
+  // what other participants would receive through LiveKit.
+  app.post("/voice/test/token", async (request, reply) => {
+    if (!request.user) {
+      return reply.status(401).send({ error: "Not authenticated" });
+    }
+
+    const roomName = `voice-test:${request.user.id}`;
+
+    const createToken = (identity: string, canPublish: boolean) => {
+      const token = new AccessToken(config.livekitApiKey, config.livekitApiSecret, {
+        identity,
+        name: request.user!.username,
+        ttl: "10m",
+      });
+      token.addGrant({ roomJoin: true, room: roomName, canPublish, canSubscribe: !canPublish });
+      return token.toJwt();
+    };
+
+    return reply.send({
+      url: config.livekitUrl,
+      roomName,
+      publisherToken: await createToken(`${request.user.id}:test-publisher`, true),
+      listenerToken: await createToken(`${request.user.id}:test-listener`, false),
+    });
+  });
+
   app.post<{ Params: { channelId: string } }>(
     "/voice/:channelId/token",
     async (request, reply) => {

@@ -9,7 +9,9 @@
     "dev": "npm run dev --workspaces --if-present",
     "dev:server": "npm run dev -w apps/server",
     "dev:web": "npm run dev -w apps/web",
+    "dev:desktop": "npm run tauri:dev -w apps/desktop",
     "build": "npm run build --workspaces --if-present",
+    "build:desktop": "npm run tauri:build -w apps/desktop",
     "db:generate": "npm run db:generate -w apps/server",
     "db:migrate": "npm run db:migrate -w apps/server",
     "db:seed": "npm run db:seed -w apps/server"

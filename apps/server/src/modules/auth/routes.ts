@@ -7,6 +7,7 @@ import { config } from "../../config/index.js";
 import {
   createSession,
   deleteSession,
+  getSessionIdFromRequest,
   resolveRole,
   SESSION_COOKIE,
   SESSION_DURATION_MS,
@@ -67,7 +68,10 @@ export async function authRoutes(app: FastifyInstance) {
       maxAge: SESSION_DURATION_MS / 1000,
     });
 
-    return { user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) } };
+    return {
+      user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) },
+      token: sessionId,
+    };
   });
 
   app.post<{ Body: LoginBody }>("/auth/login", async (request, reply) => {
@@ -97,11 +101,14 @@ export async function authRoutes(app: FastifyInstance) {
       maxAge: SESSION_DURATION_MS / 1000,
     });
 
-    return { user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) } };
+    return {
+      user: { id: user.id, username: user.username, role: resolveRole(user.username, user.role) },
+      token: sessionId,
+    };
   });
 
   app.post("/auth/logout", async (request, reply) => {
-    const sessionId = request.cookies[SESSION_COOKIE];
+    const sessionId = getSessionIdFromRequest(request);
     if (sessionId) {
       await deleteSession(sessionId);
     }

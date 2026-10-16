@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import type { ClientEvent, ServerEvent } from "@saladereunioes/shared";
-import { API_URL } from "../services/api";
+import { getApiUrl, getAuthToken } from "../services/api";
 
 function getWsUrl() {
-  const url = new URL(API_URL);
+  const url = new URL(getApiUrl());
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/ws";
+  const token = getAuthToken();
+  if (token) url.searchParams.set("token", token);
   return url.toString();
 }
 

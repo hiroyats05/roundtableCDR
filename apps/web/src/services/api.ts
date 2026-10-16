@@ -1,13 +1,54 @@
 import type { Channel, ChannelType, Message, User, UserRole } from "@saladereunioes/shared";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const SERVER_URL_KEY = "serverUrl";
+const TOKEN_KEY = "sessionToken";
+
+// Running inside the Tauri desktop shell. The app is served from tauri://localhost,
+// so cross-site cookies don't work and we authenticate with a Bearer token instead.
+export const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable
+  }
+}
+
+export function getApiUrl(): string {
+  return (isDesktop && readStorage(SERVER_URL_KEY)) || DEFAULT_API_URL;
+}
+
+export function setApiUrl(url: string) {
+  writeStorage(SERVER_URL_KEY, url.trim().replace(/\/+$/, "") || null);
+}
+
+export function getAuthToken(): string | null {
+  return isDesktop ? readStorage(TOKEN_KEY) : null;
+}
+
+function setAuthToken(token: string | null) {
+  if (isDesktop) writeStorage(TOKEN_KEY, token);
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const token = getAuthToken();
+  const response = await fetch(`${getApiUrl()}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -21,19 +62,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  register: (username: string, password: string, inviteCode: string) =>
-    request<{ user: User }>("/auth/register", {
+  register: async (username: string, password: string, inviteCode: string) => {
+    const result = await request<{ user: User; token: string }>("/auth/register", {
       method: "POST",
       body: JSON.stringify({ username, password, inviteCode }),
-    }),
+    });
+    setAuthToken(result.token);
+    return result;
+  },
 
-  login: (username: string, password: string) =>
-    request<{ user: User }>("/auth/login", {
+  login: async (username: string, password: string) => {
+    const result = await request<{ user: User; token: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
-    }),
+    });
+    setAuthToken(result.token);
+    return result;
+  },
 
-  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+  logout: async () => {
+    try {
+      return await request<{ ok: boolean }>("/auth/logout", { method: "POST" });
+    } finally {
+      setAuthToken(null);
+    }
+  },
 
   me: () => request<{ user: User }>("/auth/me"),
 
@@ -59,7 +112,13 @@ export const api = {
       method: "POST",
     }),
 
-  kickParticipant: (channelId: string, userId: string) =>
+  getVoiceTestTokens: () =>
+    request<{ url: string; roomName: string; publisherToken: string; listenerToken: string }>(
+      "/voice/test/token",
+      { method: "POST" }
+    ),
+
+  kickParticipant:(channelId: string, userId: string) =>
     request<{ ok: boolean }>(`/voice/${channelId}/kick`, {
       method: "POST",
       body: JSON.stringify({ userId }),
@@ -80,4 +139,3 @@ export const api = {
     }),
 };
 
-export { API_URL };

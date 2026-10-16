@@ -57,6 +57,24 @@ npm run dev:web
 - Backend: http://localhost:3000
 - Health check: http://localhost:3000/health
 
+## Desktop (Tauri)
+
+O app desktop fica em `apps/desktop` e empacota o mesmo frontend de `apps/web`.
+
+Pré-requisito: Rust (`brew install rustup && rustup default stable`; o rustup do
+Homebrew é keg-only, então adicione `/opt/homebrew/opt/rustup/bin` ao `PATH`).
+
+```bash
+npm run dev:desktop     # janela nativa apontando para o Vite em :5173
+npm run build:desktop   # gera .app/.dmg em apps/desktop/src-tauri/target/release/bundle
+```
+
+Na tela de login do desktop há um campo **Servidor** para apontar para qualquer
+backend. O desktop autentica com token Bearer (o login retorna `token`) em vez de
+cookie; o WebSocket recebe o token via `?token=`. A origem `tauri://localhost`
+já é liberada no CORS (configurável em `CORS_ORIGINS`). Servidores remotos
+precisam de HTTPS.
+
 ## Cadastro
 
 O cadastro requer um código de convite configurado em `REGISTER_INVITE_CODE` (padrão: `invite123`).
@@ -84,6 +102,7 @@ LiveKit  → áudio e screen share
 ```
 apps/
   web/      → React frontend
+  desktop/  → Tauri shell (macOS/Windows/Linux)
   server/   → Fastify backend
 packages/
   shared/   → tipos e eventos compartilhados

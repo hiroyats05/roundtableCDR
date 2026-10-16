@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Channel, ChannelType, User, UserRole } from "@saladereunioes/shared";
 import type { VoiceParticipant } from "../livekit/useLiveKit";
+import { ReceptionBadge, type MyAudio } from "./ReceptionBadge";
 
 interface ChannelListProps {
   channels: Channel[];
@@ -10,6 +11,7 @@ interface ChannelListProps {
   onlineUsers: Set<string>;
   users: Map<string, User>;
   currentUserId: string;
+  myAudio: MyAudio;
   isAdmin: boolean;
   isOpen: boolean;
   onSelectTextChannel: (channelId: string) => void;
@@ -73,6 +75,7 @@ export function ChannelList({
   onlineUsers,
   users,
   currentUserId,
+  myAudio,
   isAdmin,
   isOpen,
   onSelectTextChannel,
@@ -180,6 +183,9 @@ export function ChannelList({
                       <span>
                         {p.isMuted ? "🔇" : "🎤"} {p.name}
                         {p.isScreenSharing && " 🖥"}
+                        {isConnected && p.identity !== currentUserId && (
+                          <ReceptionBadge name={p.name} report={p.reception} myAudio={myAudio} />
+                        )}
                       </span>
                       {isAdmin && p.identity !== currentUserId && (
                         <span className="participant-actions">

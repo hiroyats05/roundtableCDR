@@ -115,10 +115,15 @@ export function App() {
   const voiceParticipantsMap = useMemo(() => {
     const map = new Map<string, typeof livekit.participants>();
     if (livekit.connectedChannelId) {
-      map.set(livekit.connectedChannelId, livekit.participants);
+      map.set(
+        livekit.connectedChannelId,
+        livekit.participants.map((p) => ({ ...p, reception: livekit.listenerReports.get(p.identity) }))
+      );
     }
     return map;
-  }, [livekit.connectedChannelId, livekit.participants]);
+  }, [livekit.connectedChannelId, livekit.participants, livekit.listenerReports]);
+
+  const myAudio = { mic: !livekit.isMuted, screen: livekit.isSharingAudio };
 
   const selectedChannel = channels.find((c) => c.id === selectedChannelId);
   const isAdmin = user?.role === "ADMIN";
@@ -141,14 +146,6 @@ export function App() {
   const handleJoinVoice = async (channelId: string) => {
     if (livekit.connectedChannelId === channelId) return;
     await livekit.join(channelId);
-  };
-
-  const handleToggleScreenShare = () => {
-    if (livekit.isScreenSharing) {
-      void livekit.stopScreenShare();
-    } else {
-      void livekit.startScreenShare();
-    }
   };
 
   const handleSelectTextChannel = (channelId: string) => {
@@ -202,6 +199,7 @@ export function App() {
         onlineUsers={onlineUsers}
         users={users}
         currentUserId={user.id}
+        myAudio={myAudio}
         isAdmin={isAdmin}
         isOpen={sidebarOpen}
         onSelectTextChannel={handleSelectTextChannel}
@@ -256,9 +254,15 @@ export function App() {
         isMuted={livekit.isMuted}
         isDeafened={livekit.isDeafened}
         isScreenSharing={livekit.isScreenSharing}
+        participants={livekit.participants.filter((p) => p.identity !== user.id)}
+        listenerReports={livekit.listenerReports}
+        myAudio={myAudio}
+        canPlayAudio={livekit.canPlayAudio}
+        onStartAudio={() => void livekit.startAudio()}
         onToggleMute={() => void livekit.toggleMute()}
         onToggleDeafen={() => void livekit.toggleDeafen()}
-        onToggleScreenShare={handleToggleScreenShare}
+        onStartScreenShare={livekit.startScreenShare}
+        onStopScreenShare={() => void livekit.stopScreenShare()}
         onDisconnect={() => void livekit.leave()}
         onLogout={() => void handleLogout()}
       />

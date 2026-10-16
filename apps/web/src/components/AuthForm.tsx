@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { User } from "@saladereunioes/shared";
-import { api } from "../services/api";
+import { api, getApiUrl, isDesktop, setApiUrl } from "../services/api";
 
 interface AuthFormProps {
   onAuth: (user: User) => void;
@@ -11,6 +11,7 @@ export function AuthForm({ onAuth }: AuthFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [serverUrl, setServerUrl] = useState(getApiUrl);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -18,6 +19,8 @@ export function AuthForm({ onAuth }: AuthFormProps) {
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    if (isDesktop) setApiUrl(serverUrl);
 
     try {
       const result =
@@ -39,6 +42,19 @@ export function AuthForm({ onAuth }: AuthFormProps) {
         <p className="auth-subtitle">Chat privado com voz e screen share</p>
 
         <form onSubmit={handleSubmit}>
+          {isDesktop && (
+            <label>
+              Servidor
+              <input
+                type="url"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="https://meu-servidor.com"
+                required
+              />
+            </label>
+          )}
+
           <label>
             Usuário
             <input
