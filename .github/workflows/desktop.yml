@@ -1,0 +1,48 @@
+name: Desktop build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-installer
+            bundles: nsis,msi
+            paths: |
+              apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+              apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+          - os: macos-latest
+            artifact: macos-dmg
+            bundles: dmg
+            paths: apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - run: npm ci
+
+      - run: npm run build:desktop -- -- --bundles ${{ matrix.bundles }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          if-no-files-found: error
