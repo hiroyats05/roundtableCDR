@@ -248,6 +248,15 @@ export function App() {
         )}
       </main>
 
+      {livekit.shareEndedReason && (
+        <div className="share-ended-banner" role="status">
+          <span>🖥 O compartilhamento parou: {livekit.shareEndedReason}</span>
+          <button onClick={livekit.clearShareEndedReason} aria-label="Fechar aviso">
+            ✕
+          </button>
+        </div>
+      )}
+
       <VoiceControls
         username={user.username}
         isConnected={!!livekit.connectedChannelId}

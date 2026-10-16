@@ -1,12 +1,16 @@
 import type { Channel, ChannelType, Message, User, UserRole } from "@saladereunioes/shared";
 
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-const SERVER_URL_KEY = "serverUrl";
 const TOKEN_KEY = "sessionToken";
 
 // Running inside the Tauri desktop shell. The app is served from tauri://localhost,
 // so cross-site cookies don't work and we authenticate with a Bearer token instead.
 export const isDesktop = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+// The desktop app always talks to the production server; VITE_DESKTOP_API_URL
+// overrides it for local development.
+const DESKTOP_API_URL = import.meta.env.VITE_DESKTOP_API_URL ?? "https://roundtablecdr.duckdns.org";
+const WEB_API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const API_URL = (isDesktop ? DESKTOP_API_URL : WEB_API_URL).replace(/\/+$/, "");
 
 function readStorage(key: string): string | null {
   try {
@@ -26,11 +30,7 @@ function writeStorage(key: string, value: string | null) {
 }
 
 export function getApiUrl(): string {
-  return (isDesktop && readStorage(SERVER_URL_KEY)) || DEFAULT_API_URL;
-}
-
-export function setApiUrl(url: string) {
-  writeStorage(SERVER_URL_KEY, url.trim().replace(/\/+$/, "") || null);
+  return API_URL;
 }
 
 export function getAuthToken(): string | null {
@@ -111,6 +111,9 @@ export const api = {
     request<{ token: string; url: string; roomName: string }>(`/voice/${channelId}/token`, {
       method: "POST",
     }),
+
+  getScreenShareToken: (channelId: string) =>
+    request<{ token: string; url: string }>(`/voice/${channelId}/screen-token`, { method: "POST" }),
 
   getVoiceTestTokens: () =>
     request<{ url: string; roomName: string; publisherToken: string; listenerToken: string }>(

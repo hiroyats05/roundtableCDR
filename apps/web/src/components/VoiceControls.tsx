@@ -19,7 +19,7 @@ interface VoiceControlsProps {
   onStartAudio: () => void;
   onToggleMute: () => void;
   onToggleDeafen: () => void;
-  onStartScreenShare: (quality: ScreenShareQuality) => Promise<void>;
+  onStartScreenShare: (quality: ScreenShareQuality, sourceId?: string) => Promise<void>;
   onStopScreenShare: () => void;
   onDisconnect: () => void;
   onLogout: () => void;

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { AccessToken, RoomServiceClient, TrackType } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, TrackSource, TrackType } from "livekit-server-sdk";
 import { eq } from "drizzle-orm";
 import { db } from "../../database/index.js";
 import { channels } from "../../database/schema.js";
@@ -37,7 +37,7 @@ export async function voiceRoutes(app: FastifyInstance) {
     };
 
     return reply.send({
-      url: config.livekitUrl,
+      url: config.livekitPublicUrl,
       roomName,
       publisherToken: await createToken(`${request.user.id}:test-publisher`, true),
       listenerToken: await createToken(`${request.user.id}:test-listener`, false),
@@ -85,11 +85,42 @@ export async function voiceRoutes(app: FastifyInstance) {
 
       return reply.send({
         token: jwt,
-        url: config.livekitUrl,
+        url: config.livekitPublicUrl,
         roomName,
       });
     }
   );
+
+  // Native screen share from the desktop app: Rust publishes the share through its
+  // own connection, as a companion participant "<userId>:screen" that can only
+  // publish. Clients fold it back into its owner (same display name).
+  app.post<{ Params: { channelId: string } }>("/voice/:channelId/screen-token", async (request, reply) => {
+    if (!request.user) {
+      return reply.status(401).send({ error: "Not authenticated" });
+    }
+
+    const { channelId } = request.params;
+    const [channel] = await db.select().from(channels).where(eq(channels.id, channelId)).limit(1);
+    if (!channel || channel.type !== "VOICE") {
+      return reply.status(404).send({ error: "Voice channel not found" });
+    }
+
+    const token = new AccessToken(config.livekitApiKey, config.livekitApiSecret, {
+      identity: `${request.user.id}:screen`,
+      name: request.user.username,
+      ttl: "6h",
+    });
+    token.addGrant({
+      roomJoin: true,
+      room: `voice:${channelId}`,
+      canPublish: true,
+      canSubscribe: false,
+      canPublishData: false,
+      canPublishSources: [TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO],
+    });
+
+    return reply.send({ token: await token.toJwt(), url: config.livekitPublicUrl });
+  });
 
   app.post<{ Params: { channelId: string }; Body: ParticipantActionBody }>(
     "/voice/:channelId/kick",
@@ -109,6 +140,8 @@ export async function voiceRoutes(app: FastifyInstance) {
 
       try {
         await roomService.removeParticipant(`voice:${channelId}`, userId);
+        // Also drop their native screen share, if any.
+        await roomService.removeParticipant(`voice:${channelId}`, `${userId}:screen`).catch(() => {});
       } catch {
         return reply.status(404).send({ error: "Participant not found in call" });
       }

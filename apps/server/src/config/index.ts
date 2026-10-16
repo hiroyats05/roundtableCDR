@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 const livekitUrl = process.env.LIVEKIT_URL ?? "ws://localhost:7880";
+const livekitPublicUrl = process.env.LIVEKIT_PUBLIC_URL ?? livekitUrl;
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -9,6 +10,7 @@ export const config = {
   sessionSecret: process.env.SESSION_SECRET ?? "dev-session-secret-change-in-production",
   registerInviteCode: process.env.REGISTER_INVITE_CODE ?? "invite123",
   livekitUrl,
+  livekitPublicUrl,
   livekitHttpUrl: livekitUrl.replace(/^ws/, "http"),
   livekitApiKey: process.env.LIVEKIT_API_KEY ?? "devkey",
   livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? "secret",

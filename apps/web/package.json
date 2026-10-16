@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@saladereunioes/shared": "*",
+    "@tauri-apps/api": "^2.12.4",
     "livekit-client": "^2.9.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

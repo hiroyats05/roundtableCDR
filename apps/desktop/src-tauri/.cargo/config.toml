@@ -1,0 +1,12 @@
+# ScreenCaptureKit (native screen share) requires macOS 13; linking for an older
+# target also pulls in Swift back-compat libraries the toolchain doesn't ship.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "13.0"
+
+# libwebrtc (LiveKit) relies on Objective-C categories that the linker drops
+# unless told to load all ObjC code.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-ObjC"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-ObjC"]

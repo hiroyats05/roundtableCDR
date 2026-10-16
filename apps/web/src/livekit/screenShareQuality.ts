@@ -1,4 +1,4 @@
-import type { ScreenShareCaptureOptions, TrackPublishOptions } from "livekit-client";
+import type { AudioCaptureOptions, ScreenShareCaptureOptions, TrackPublishOptions } from "livekit-client";
 
 export type ScreenShareResolution = "720p" | "1080p" | "1440p" | "source";
 export type ScreenShareFps = 15 | 30 | 60;
@@ -69,7 +69,10 @@ export function toLiveKitOptions(quality: ScreenShareQuality): {
 
   return {
     capture: {
-      audio: quality.audio,
+      // System audio also contains the call itself (everyone else's voices), which
+      // makes them hear themselves back as echo. restrictOwnAudio asks Chromium to
+      // leave this app's own playback out of the capture; other engines ignore it.
+      audio: quality.audio ? ({ restrictOwnAudio: true } as AudioCaptureOptions) : false,
       systemAudio: quality.audio ? "include" : "exclude",
       contentHint: quality.content,
       // LiveKit treats 0x0 as uncapped: "source" captures at the screen's native
