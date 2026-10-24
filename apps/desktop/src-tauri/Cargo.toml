@@ -1,7 +1,7 @@
 [package]
 name = "saladereunioes"
-version = "0.0.1"
-description = "Sala de Reuniões desktop"
+version = "0.0.2"
+description = "roundtableCDR desktop"
 edition = "2021"
 
 [lib]

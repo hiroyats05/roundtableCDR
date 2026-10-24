@@ -60,6 +60,16 @@ export interface VoiceParticipant {
   reception?: ListenerReport;
 }
 
+export interface ScreenShare {
+  /** LiveKit identity of the participant publishing the share (may be a "<user>:screen" companion). */
+  identity: string;
+  name: string;
+  track: MediaStreamTrack;
+  /** My own share, shown as a preview of what others see. */
+  isLocal: boolean;
+  hasAudio: boolean;
+}
+
 export function useLiveKit() {
   const roomRef = useRef<Room | null>(null);
   const [connectedChannelId, setConnectedChannelId] = useState<string | null>(null);
@@ -67,11 +77,9 @@ export function useLiveKit() {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [screenShareTrack, setScreenShareTrack] = useState<MediaStreamTrack | null>(null);
-  const [remoteScreenShare, setRemoteScreenShare] = useState<{
-    participantName: string;
-    track: MediaStreamTrack;
-  } | null>(null);
+  const [screenShares, setScreenShares] = useState<ScreenShare[]>([]);
+  // publisher identity -> playback volume (0..1) of their share audio
+  const [shareVolumes, setShareVolumes] = useState<Map<string, number>>(new Map());
   const [canPlayAudio, setCanPlayAudio] = useState(true);
   const [isSharingAudio, setIsSharingAudio] = useState(false);
   // identity -> what that listener reports about my audio
@@ -113,25 +121,42 @@ export function useLiveKit() {
     setParticipants(all);
   }, []);
 
-  const updateScreenShare = useCallback(() => {
+  const updateScreenShares = useCallback(() => {
     const room = roomRef.current;
     if (!room) {
-      setRemoteScreenShare(null);
+      setScreenShares([]);
       return;
+    }
+
+    const me = room.localParticipant;
+    const shares: ScreenShare[] = [];
+
+    const localPub = me.getTrackPublication(Track.Source.ScreenShare);
+    if (localPub?.track?.mediaStreamTrack) {
+      shares.push({
+        identity: me.identity,
+        name: me.name || me.identity,
+        track: localPub.track.mediaStreamTrack,
+        isLocal: true,
+        hasAudio: false,
+      });
     }
 
     for (const participant of room.remoteParticipants.values()) {
       const pub = participant.getTrackPublication(Track.Source.ScreenShare);
-      if (pub?.track?.mediaStreamTrack) {
-        setRemoteScreenShare({
-          participantName: participant.name || participant.identity,
-          track: pub.track.mediaStreamTrack,
-        });
-        return;
-      }
+      if (!pub?.track?.mediaStreamTrack) continue;
+      // My own native share comes back as a remote "<me>:screen" participant.
+      const isLocal = participant.identity === screenIdentity(me.identity);
+      shares.push({
+        identity: participant.identity,
+        name: participant.name || participant.identity,
+        track: pub.track.mediaStreamTrack,
+        isLocal,
+        hasAudio: !isLocal && !!participant.getTrackPublication(Track.Source.ScreenShareAudio),
+      });
     }
 
-    setRemoteScreenShare(null);
+    setScreenShares(shares);
   }, []);
 
   const resetState = useCallback(() => {
@@ -142,8 +167,8 @@ export function useLiveKit() {
     setIsMuted(false);
     setIsDeafened(false);
     setIsScreenSharing(false);
-    setScreenShareTrack(null);
-    setRemoteScreenShare(null);
+    setScreenShares([]);
+    setShareVolumes(new Map());
     setCanPlayAudio(true);
     setIsSharingAudio(false);
     setListenerReports(new Map());
@@ -239,6 +264,7 @@ export function useLiveKit() {
       room.on(RoomEvent.ParticipantConnected, updateParticipants);
       room.on(RoomEvent.ParticipantDisconnected, (participant) => {
         updateParticipants();
+        updateScreenShares();
         setListenerReports((prev) => {
           const next = new Map(prev);
           next.delete(participant.identity);
@@ -261,20 +287,22 @@ export function useLiveKit() {
       room.on(RoomEvent.LocalTrackPublished, () => {
         updateParticipants();
         if (nativeShareRef.current) return;
-        const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
-        if (pub?.track?.mediaStreamTrack) {
+        updateScreenShares();
+        if (room.localParticipant.getTrackPublication(Track.Source.ScreenShare)) {
           setIsScreenSharing(true);
-          setScreenShareTrack(pub.track.mediaStreamTrack);
         }
         setIsSharingAudio(!!room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio));
       });
       room.on(RoomEvent.LocalTrackUnpublished, () => {
         updateParticipants();
+        updateScreenShares();
         if (nativeShareRef.current) return;
         setIsSharingAudio(!!room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio));
         setIsScreenSharing(false);
-        setScreenShareTrack(null);
       });
+      // A share's audio track can be published after its video.
+      room.on(RoomEvent.TrackPublished, updateScreenShares);
+      room.on(RoomEvent.TrackUnpublished, updateScreenShares);
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         // My own native share: keep the video as a preview of what others see,
         // but never play its audio back to me (I already hear the app locally).
@@ -284,22 +312,19 @@ export function useLiveKit() {
         }
         attachAudio(track);
         updateParticipants();
-        if (publication.source === Track.Source.ScreenShare && publication.track?.mediaStreamTrack) {
-          setRemoteScreenShare({
-            participantName: participant.name || participant.identity,
-            track: publication.track.mediaStreamTrack,
-          });
+        if (publication.source === Track.Source.ScreenShare) {
+          updateScreenShares();
         }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
         detachAudio(track);
         updateParticipants();
         if (publication.source === Track.Source.ScreenShare) {
-          updateScreenShare();
+          updateScreenShares();
         }
       });
     },
-    [updateParticipants, updateScreenShare, resetState]
+    [updateParticipants, updateScreenShares, resetState]
   );
 
   const join = useCallback(
@@ -424,9 +449,14 @@ export function useLiveKit() {
 
     await room.localParticipant.setScreenShareEnabled(false);
     setIsScreenSharing(false);
-    setScreenShareTrack(null);
     updateParticipants();
-  }, [updateParticipants, stopNativeShare]);
+    updateScreenShares();
+  }, [updateParticipants, updateScreenShares, stopNativeShare]);
+
+  const setShareVolume = useCallback((identity: string, volume: number) => {
+    roomRef.current?.remoteParticipants.get(identity)?.setVolume(volume, Track.Source.ScreenShareAudio);
+    setShareVolumes((prev) => new Map(prev).set(identity, volume));
+  }, []);
 
   // The native capture can end on its own (window closed, permission revoked).
   const [shareEndedReason, setShareEndedReason] = useState<string | null>(null);
@@ -455,8 +485,9 @@ export function useLiveKit() {
     isMuted,
     isDeafened,
     isScreenSharing,
-    screenShareTrack,
-    remoteScreenShare,
+    screenShares,
+    shareVolumes,
+    setShareVolume,
     canPlayAudio,
     isSharingAudio,
     listenerReports,

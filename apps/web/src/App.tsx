@@ -5,9 +5,30 @@ import { useWebSocket } from "./websocket/useWebSocket";
 import { useLiveKit } from "./livekit/useLiveKit";
 import { AuthForm } from "./components/AuthForm";
 import { ChannelList } from "./components/ChannelList";
+import { List, Users, X } from "@phosphor-icons/react";
 import { ChatPanel } from "./components/ChatPanel";
-import { ScreenShareView } from "./components/ScreenShareView";
+import { MemberList } from "./components/MemberList";
+import { ScreenShareStage } from "./components/ScreenShareView";
 import { VoiceControls } from "./components/VoiceControls";
+
+// Matches the breakpoint where the side columns become drawers (styles.css).
+const MOBILE_QUERY = "(max-width: 900px)";
+
+function readHidden(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeHidden(key: string, hidden: boolean) {
+  try {
+    localStorage.setItem(key, hidden ? "1" : "0");
+  } catch {
+    // storage unavailable
+  }
+}
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -18,6 +39,22 @@ export function App() {
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
   const [users, setUsers] = useState<Map<string, User>>(new Map());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [channelsHidden, setChannelsHidden] = useState(() => readHidden("channelsHidden"));
+  const [membersHidden, setMembersHidden] = useState(() => readHidden("membersHidden"));
+
+  useEffect(() => writeHidden("channelsHidden", channelsHidden), [channelsHidden]);
+  useEffect(() => writeHidden("membersHidden", membersHidden), [membersHidden]);
+
+  const usersRef = useRef(users);
+  usersRef.current = users;
+
+  const refreshUsers = useCallback(() => {
+    api
+      .getUsers()
+      .then((data) => setUsers(new Map(data.map((u) => [u.id, u]))))
+      .catch(() => {});
+  }, []);
 
   const joinedChannelRef = useRef<string | null>(null);
 
@@ -46,6 +83,8 @@ export function App() {
         setUser((prev) => (prev && prev.id === event.user.id ? event.user : prev));
       } else if (event.type === "presence:online") {
         setOnlineUsers((prev) => new Set(prev).add(event.userId));
+        // Someone who registered after we loaded the user list.
+        if (!usersRef.current.has(event.userId)) refreshUsers();
       } else if (event.type === "presence:offline") {
         setOnlineUsers((prev) => {
           const next = new Set(prev);
@@ -54,7 +93,7 @@ export function App() {
         });
       }
     },
-    [selectedChannelId, livekit]
+    [selectedChannelId, livekit, refreshUsers]
   );
 
   const { send: wsSend } = useWebSocket(handleWsEvent, !!user);
@@ -81,10 +120,8 @@ export function App() {
       }
     });
 
-    api.getUsers().then((data) => {
-      setUsers(new Map(data.map((u) => [u.id, u])));
-    });
-  }, [user]);
+    refreshUsers();
+  }, [user, refreshUsers]);
 
   useEffect(() => {
     if (!selectedChannelId) return;
@@ -126,6 +163,7 @@ export function App() {
   const myAudio = { mic: !livekit.isMuted, screen: livekit.isSharingAudio };
 
   const selectedChannel = channels.find((c) => c.id === selectedChannelId);
+  const voiceChannel = channels.find((c) => c.id === livekit.connectedChannelId);
   const isAdmin = user?.role === "ADMIN";
 
   const handleAuth = (u: User) => {
@@ -185,19 +223,29 @@ export function App() {
     return <AuthForm onAuth={handleAuth} />;
   }
 
-  const showScreenShare = livekit.remoteScreenShare ?? (livekit.isScreenSharing && livekit.screenShareTrack
-    ? { participantName: user.username, track: livekit.screenShareTrack }
-    : null);
+  const isMobile = () => window.matchMedia(MOBILE_QUERY).matches;
+
+  const toggleChannels = () => {
+    if (isMobile()) setSidebarOpen((v) => !v);
+    else setChannelsHidden(false);
+  };
+
+  const toggleMembers = () => {
+    if (isMobile()) setMembersOpen((v) => !v);
+    else setMembersHidden(false);
+  };
+
+  const appClassName = ["app", channelsHidden && "channels-hidden", membersHidden && "members-hidden"]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="app">
+    <div className={appClassName}>
       <ChannelList
         channels={channels}
         selectedChannelId={selectedChannelId}
         connectedVoiceChannelId={livekit.connectedChannelId}
         voiceParticipants={voiceParticipantsMap}
-        onlineUsers={onlineUsers}
-        users={users}
         currentUserId={user.id}
         myAudio={myAudio}
         isAdmin={isAdmin}
@@ -205,33 +253,66 @@ export function App() {
         onSelectTextChannel={handleSelectTextChannel}
         onJoinVoiceChannel={handleJoinVoice}
         onClose={() => setSidebarOpen(false)}
+        onHide={() => setChannelsHidden(true)}
         onCreateChannel={handleCreateChannel}
         onDeleteChannel={handleDeleteChannel}
         onKickParticipant={handleKickParticipant}
         onMuteParticipant={handleMuteParticipant}
-        onUpdateUserRole={handleUpdateUserRole}
+        footer={
+          <VoiceControls
+            username={user.username}
+            voiceChannelName={livekit.connectedChannelId ? (voiceChannel?.name ?? "voz") : null}
+            isMuted={livekit.isMuted}
+            isDeafened={livekit.isDeafened}
+            isScreenSharing={livekit.isScreenSharing}
+            participants={livekit.participants.filter((p) => p.identity !== user.id)}
+            listenerReports={livekit.listenerReports}
+            myAudio={myAudio}
+            canPlayAudio={livekit.canPlayAudio}
+            onStartAudio={() => void livekit.startAudio()}
+            onToggleMute={() => void livekit.toggleMute()}
+            onToggleDeafen={() => void livekit.toggleDeafen()}
+            onStartScreenShare={livekit.startScreenShare}
+            onStopScreenShare={() => void livekit.stopScreenShare()}
+            onDisconnect={() => void livekit.leave()}
+            onLogout={() => void handleLogout()}
+          />
+        }
       />
 
-      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      {(sidebarOpen || membersOpen) && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => {
+            setSidebarOpen(false);
+            setMembersOpen(false);
+          }}
+        />
+      )}
 
       <main className="main-content">
         <div className="mobile-topbar">
-          <button className="sidebar-toggle" onClick={() => setSidebarOpen((v) => !v)} aria-label="Abrir canais">
-            ☰
+          <button className="icon-button sidebar-toggle" onClick={toggleChannels} aria-label="Mostrar canais">
+            <List size={22} />
           </button>
           <span className="mobile-topbar-title">
-            {selectedChannel ? `# ${selectedChannel.name}` : "Sala de Reuniões"}
+            {selectedChannel ? `#${selectedChannel.name}` : "roundtableCDR"}
           </span>
+          <button className="icon-button members-toggle" onClick={toggleMembers} aria-label="Mostrar membros">
+            <Users size={22} />
+          </button>
         </div>
 
-        {showScreenShare ? (
-          <ScreenShareView
-            participantName={showScreenShare.participantName}
-            track={showScreenShare.track}
+        {livekit.screenShares.length > 0 && (
+          <ScreenShareStage
+            shares={livekit.screenShares}
+            volumes={livekit.shareVolumes}
+            onVolumeChange={livekit.setShareVolume}
           />
-        ) : selectedChannel ? (
+        )}
+
+        {selectedChannel ? (
           <ChatPanel
-            channelName={selectedChannel.name}
             messages={messages}
             userMap={userMap}
             currentUserId={user.id}
@@ -248,33 +329,25 @@ export function App() {
         )}
       </main>
 
+      <MemberList
+        onlineUsers={onlineUsers}
+        users={users}
+        currentUserId={user.id}
+        isAdmin={isAdmin}
+        isOpen={membersOpen}
+        onClose={() => setMembersOpen(false)}
+        onHide={() => setMembersHidden(true)}
+        onUpdateUserRole={handleUpdateUserRole}
+      />
+
       {livekit.shareEndedReason && (
         <div className="share-ended-banner" role="status">
-          <span>🖥 O compartilhamento parou: {livekit.shareEndedReason}</span>
-          <button onClick={livekit.clearShareEndedReason} aria-label="Fechar aviso">
-            ✕
+          <span>O compartilhamento parou: {livekit.shareEndedReason}</span>
+          <button className="icon-button" onClick={livekit.clearShareEndedReason} aria-label="Fechar aviso">
+            <X size={16} />
           </button>
         </div>
       )}
-
-      <VoiceControls
-        username={user.username}
-        isConnected={!!livekit.connectedChannelId}
-        isMuted={livekit.isMuted}
-        isDeafened={livekit.isDeafened}
-        isScreenSharing={livekit.isScreenSharing}
-        participants={livekit.participants.filter((p) => p.identity !== user.id)}
-        listenerReports={livekit.listenerReports}
-        myAudio={myAudio}
-        canPlayAudio={livekit.canPlayAudio}
-        onStartAudio={() => void livekit.startAudio()}
-        onToggleMute={() => void livekit.toggleMute()}
-        onToggleDeafen={() => void livekit.toggleDeafen()}
-        onStartScreenShare={livekit.startScreenShare}
-        onStopScreenShare={() => void livekit.stopScreenShare()}
-        onDisconnect={() => void livekit.leave()}
-        onLogout={() => void handleLogout()}
-      />
     </div>
   );
 }

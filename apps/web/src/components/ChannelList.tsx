@@ -1,6 +1,20 @@
-import { useState } from "react";
-import type { Channel, ChannelType, User, UserRole } from "@saladereunioes/shared";
+import { useState, type ReactNode } from "react";
+import {
+  ChatCircle,
+  Microphone,
+  MicrophoneSlash,
+  Plus,
+  Prohibit,
+  Screencast,
+  SidebarSimple,
+  Trash,
+  UserSound,
+  X,
+} from "@phosphor-icons/react";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { Channel, ChannelType } from "@saladereunioes/shared";
 import type { VoiceParticipant } from "../livekit/useLiveKit";
+import { Avatar } from "./Avatar";
 import { ReceptionBadge, type MyAudio } from "./ReceptionBadge";
 
 interface ChannelListProps {
@@ -8,20 +22,21 @@ interface ChannelListProps {
   selectedChannelId: string | null;
   connectedVoiceChannelId: string | null;
   voiceParticipants: Map<string, VoiceParticipant[]>;
-  onlineUsers: Set<string>;
-  users: Map<string, User>;
   currentUserId: string;
   myAudio: MyAudio;
   isAdmin: boolean;
   isOpen: boolean;
+  /** Pinned to the bottom of the sidebar (the user panel). */
+  footer: ReactNode;
   onSelectTextChannel: (channelId: string) => void;
   onJoinVoiceChannel: (channelId: string) => void;
   onClose: () => void;
+  /** Collapses the column on desktop. */
+  onHide: () => void;
   onCreateChannel: (name: string, type: ChannelType) => void;
   onDeleteChannel: (channelId: string) => void;
   onKickParticipant: (channelId: string, userId: string) => void;
   onMuteParticipant: (channelId: string, userId: string) => void;
-  onUpdateUserRole: (userId: string, role: UserRole) => void;
 }
 
 function CreateChannelForm({
@@ -72,173 +87,165 @@ export function ChannelList({
   selectedChannelId,
   connectedVoiceChannelId,
   voiceParticipants,
-  onlineUsers,
-  users,
   currentUserId,
   myAudio,
   isAdmin,
   isOpen,
+  footer,
   onSelectTextChannel,
   onJoinVoiceChannel,
   onClose,
+  onHide,
   onCreateChannel,
   onDeleteChannel,
   onKickParticipant,
   onMuteParticipant,
-  onUpdateUserRole,
 }: ChannelListProps) {
   const [creating, setCreating] = useState<ChannelType | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   const textChannels = channels.filter((c) => c.type === "TEXT");
   const voiceChannels = channels.filter((c) => c.type === "VOICE");
 
   const handleDeleteChannel = (e: React.MouseEvent, channelId: string, name: string) => {
     e.stopPropagation();
-    if (window.confirm(`Apagar o canal #${name}?`)) {
-      onDeleteChannel(channelId);
-    }
+    setPendingDelete({ id: channelId, name });
   };
 
   return (
     <aside className={`channel-list ${isOpen ? "open" : ""}`}>
       <div className="channel-list-header">
-        <span>Sala de Reuniões</span>
-        <button className="sidebar-close" onClick={onClose} aria-label="Fechar">
-          ✕
+        <span>Roundtable Server</span>
+        <button className="icon-button column-hide-button" onClick={onHide} aria-label="Esconder canais" title="Esconder canais">
+          <SidebarSimple size={18} />
+        </button>
+        <button className="icon-button sidebar-close" onClick={onClose} aria-label="Fechar">
+          <X size={18} />
         </button>
       </div>
 
-      <div className="channel-section">
-        <div className="channel-section-header">
-          <h3>TEXT</h3>
-          {isAdmin && (
-            <button className="add-channel-button" onClick={() => setCreating("TEXT")} aria-label="Criar canal de texto">
-              +
-            </button>
-          )}
-        </div>
-        {isAdmin && creating === "TEXT" && (
-          <CreateChannelForm type="TEXT" onCreate={onCreateChannel} onDone={() => setCreating(null)} />
-        )}
-        {textChannels.map((channel) => (
-          <div key={channel.id} className="channel-item-row">
-            <button
-              className={`channel-item ${selectedChannelId === channel.id ? "active" : ""}`}
-              onClick={() => onSelectTextChannel(channel.id)}
-            >
-              # {channel.name}
-            </button>
+      <div className="channel-sections">
+        <div className="channel-section">
+          <div className="channel-section-header">
+            <ChatCircle size={24} className="channel-section-icon" />
+            <h3>TEXT</h3>
             {isAdmin && (
-              <button
-                className="channel-delete-button"
-                onClick={(e) => handleDeleteChannel(e, channel.id, channel.name)}
-                aria-label={`Apagar ${channel.name}`}
-              >
-                🗑
+              <button className="add-channel-button" onClick={() => setCreating("TEXT")} aria-label="Criar canal de texto">
+                <Plus size={10} weight="bold" />
               </button>
             )}
           </div>
-        ))}
-      </div>
-
-      <div className="channel-section">
-        <div className="channel-section-header">
-          <h3>VOICE</h3>
-          {isAdmin && (
-            <button className="add-channel-button" onClick={() => setCreating("VOICE")} aria-label="Criar canal de voz">
-              +
-            </button>
+          {isAdmin && creating === "TEXT" && (
+            <CreateChannelForm type="TEXT" onCreate={onCreateChannel} onDone={() => setCreating(null)} />
           )}
-        </div>
-        {isAdmin && creating === "VOICE" && (
-          <CreateChannelForm type="VOICE" onCreate={onCreateChannel} onDone={() => setCreating(null)} />
-        )}
-        {voiceChannels.map((channel) => {
-          const participants = voiceParticipants.get(channel.id) ?? [];
-          const isConnected = connectedVoiceChannelId === channel.id;
-
-          return (
-            <div key={channel.id} className="voice-channel">
-              <div className="channel-item-row">
+          {textChannels.map((channel) => (
+            <div key={channel.id} className="channel-item-row">
+              <button
+                className={`channel-item ${selectedChannelId === channel.id ? "active" : ""}`}
+                onClick={() => onSelectTextChannel(channel.id)}
+              >
+                #{channel.name}
+              </button>
+              {isAdmin && (
                 <button
-                  className={`channel-item voice ${isConnected ? "active" : ""}`}
-                  onClick={() => onJoinVoiceChannel(channel.id)}
+                  className="channel-delete-button"
+                  onClick={(e) => handleDeleteChannel(e, channel.id, channel.name)}
+                  aria-label={`Apagar ${channel.name}`}
                 >
-                  🔊 {channel.name}
+                  <Trash size={12} />
                 </button>
-                {isAdmin && (
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="channel-section">
+          <div className="channel-section-header">
+            <UserSound size={24} className="channel-section-icon" />
+            <h3>VOICE</h3>
+            {isAdmin && (
+              <button className="add-channel-button" onClick={() => setCreating("VOICE")} aria-label="Criar canal de voz">
+                <Plus size={10} weight="bold" />
+              </button>
+            )}
+          </div>
+          {isAdmin && creating === "VOICE" && (
+            <CreateChannelForm type="VOICE" onCreate={onCreateChannel} onDone={() => setCreating(null)} />
+          )}
+          {voiceChannels.map((channel) => {
+            const participants = voiceParticipants.get(channel.id) ?? [];
+            const isConnected = connectedVoiceChannelId === channel.id;
+
+            return (
+              <div key={channel.id} className="voice-channel">
+                <div className="channel-item-row">
                   <button
-                    className="channel-delete-button"
-                    onClick={(e) => handleDeleteChannel(e, channel.id, channel.name)}
-                    aria-label={`Apagar ${channel.name}`}
+                    className={`channel-item voice ${isConnected ? "active" : ""}`}
+                    onClick={() => onJoinVoiceChannel(channel.id)}
                   >
-                    🗑
+                    #{channel.name}
                   </button>
-                )}
-              </div>
-              {participants.length > 0 && (
-                <ul className="voice-participants">
-                  {participants.map((p) => (
-                    <li key={p.identity}>
-                      <span>
-                        {p.isMuted ? "🔇" : "🎤"} {p.name}
-                        {p.isScreenSharing && " 🖥"}
+                  {isAdmin && (
+                    <button
+                      className="channel-delete-button"
+                      onClick={(e) => handleDeleteChannel(e, channel.id, channel.name)}
+                      aria-label={`Apagar ${channel.name}`}
+                    >
+                      <Trash size={12} />
+                    </button>
+                  )}
+                </div>
+                {participants.length > 0 && (
+                  <ul className="voice-participants">
+                    {participants.map((p) => (
+                      <li key={p.identity}>
+                        <Avatar size="sm" speaking={p.isSpeaking && !p.isMuted} />
+                        <span className="voice-participant-name">{p.name}</span>
+                        {p.isMuted ? <MicrophoneSlash size={12} /> : <Microphone size={12} />}
+                        {p.isScreenSharing && <Screencast size={12} />}
                         {isConnected && p.identity !== currentUserId && (
                           <ReceptionBadge name={p.name} report={p.reception} myAudio={myAudio} />
                         )}
-                      </span>
-                      {isAdmin && p.identity !== currentUserId && (
-                        <span className="participant-actions">
-                          <button
-                            onClick={() => onMuteParticipant(channel.id, p.identity)}
-                            aria-label={`Mutar ${p.name}`}
-                          >
-                            🔇
-                          </button>
-                          <button
-                            onClick={() => onKickParticipant(channel.id, p.identity)}
-                            aria-label={`Kickar ${p.name}`}
-                          >
-                            ⛔
-                          </button>
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="online-section">
-        <h3>Online — {onlineUsers.size}</h3>
-        <ul className="online-users">
-          {Array.from(onlineUsers).map((userId) => {
-            const u = users.get(userId);
-            const isSelf = userId === currentUserId;
-            return (
-              <li key={userId}>
-                <span className="online-dot" />
-                <span className="online-name">
-                  {u?.role === "ADMIN" && "👑 "}
-                  {u?.username ?? userId}
-                  {isSelf && " (você)"}
-                </span>
-                {isAdmin && !isSelf && u && (
-                  <button
-                    className="role-toggle-button"
-                    onClick={() => onUpdateUserRole(userId, u.role === "ADMIN" ? "MEMBER" : "ADMIN")}
-                  >
-                    {u.role === "ADMIN" ? "Rebaixar" : "Promover"}
-                  </button>
+                        {isAdmin && p.identity !== currentUserId && (
+                          <span className="participant-actions">
+                            <button
+                              onClick={() => onMuteParticipant(channel.id, p.identity)}
+                              aria-label={`Mutar ${p.name}`}
+                              title={`Mutar ${p.name}`}
+                            >
+                              <MicrophoneSlash size={12} />
+                            </button>
+                            <button
+                              onClick={() => onKickParticipant(channel.id, p.identity)}
+                              aria-label={`Kickar ${p.name}`}
+                              title={`Kickar ${p.name}`}
+                            >
+                              <Prohibit size={12} />
+                            </button>
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       </div>
+
+      {footer}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          message={`Apagar o canal #${pendingDelete.name}?`}
+          onConfirm={() => {
+            onDeleteChannel(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </aside>
   );
 }

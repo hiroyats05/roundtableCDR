@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { PaperPlaneRight, Trash } from "@phosphor-icons/react";
 import type { Message } from "@saladereunioes/shared";
+import { Avatar } from "./Avatar";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface ChatPanelProps {
-  channelName: string;
   messages: Message[];
   userMap: Map<string, string>;
   currentUserId: string;
@@ -12,7 +14,6 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
-  channelName,
   messages,
   userMap,
   currentUserId,
@@ -21,6 +22,7 @@ export function ChatPanel({
   onDeleteMessage,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,10 +39,6 @@ export function ChatPanel({
 
   return (
     <div className="chat-panel">
-      <header className="chat-header">
-        <h2># {channelName}</h2>
-      </header>
-
       <div className="messages">
         {messages.map((msg) => {
           const author = userMap.get(msg.authorId) ?? msg.authorId;
@@ -54,22 +52,23 @@ export function ChatPanel({
 
           return (
             <div key={msg.id} className={`message ${isOwn ? "own" : ""}`}>
-              <span className="message-author">{author}</span>
-              <span className="message-time">{time}</span>
-              {canDelete && (
-                <button
-                  className="message-delete-button"
-                  onClick={() => {
-                    if (window.confirm("Apagar esta mensagem?")) {
-                      onDeleteMessage(msg.id);
-                    }
-                  }}
-                  aria-label="Apagar mensagem"
-                >
-                  🗑
-                </button>
-              )}
-              <p className="message-content">{msg.content}</p>
+              <Avatar />
+              <div className="message-body">
+                <div className="message-meta">
+                  <span className="message-author">{author}</span>
+                  <span className="message-time">{time}</span>
+                  {canDelete && (
+                    <button
+                      className="message-delete-button"
+                      onClick={() => setPendingDeleteId(msg.id)}
+                      aria-label="Apagar mensagem"
+                    >
+                      <Trash size={14} />
+                    </button>
+                  )}
+                </div>
+                <p className="message-content">{msg.content}</p>
+              </div>
             </div>
           );
         })}
@@ -79,13 +78,26 @@ export function ChatPanel({
       <form className="message-input" onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="mensagem..."
+          placeholder="roundtable"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           maxLength={4000}
         />
-        <button type="submit">Enviar</button>
+        <button type="submit" aria-label="Enviar">
+          <PaperPlaneRight size={24} />
+        </button>
       </form>
+
+      {pendingDeleteId && (
+        <ConfirmDialog
+          message="Apagar esta mensagem?"
+          onConfirm={() => {
+            onDeleteMessage(pendingDeleteId);
+            setPendingDeleteId(null);
+          }}
+          onCancel={() => setPendingDeleteId(null)}
+        />
+      )}
     </div>
   );
 }

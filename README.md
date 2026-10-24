@@ -1,4 +1,4 @@
-# Sala de Reuniões
+# roundtableCDR
 
 Aplicação privada de comunicação com chat em tempo real, canais de voz e compartilhamento de tela.
 

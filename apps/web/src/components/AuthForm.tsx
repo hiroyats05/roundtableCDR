@@ -35,7 +35,7 @@ export function AuthForm({ onAuth }: AuthFormProps) {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>Sala de Reuniões</h1>
+        <h1>roundtableCDR</h1>
         <p className="auth-subtitle">Chat privado com voz e screen share</p>
 
         <form onSubmit={handleSubmit}>
